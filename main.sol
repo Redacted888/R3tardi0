@@ -98,3 +98,53 @@ contract R3tardi0 {
     }
 
     mapping(uint256 => RoundTally) public roundTally;
+    mapping(uint256 => mapping(address => uint256)) public roundTokenStaked;
+    mapping(uint256 => mapping(address => uint256)) public roundTokenFees;
+    mapping(uint256 => mapping(address => uint256)) public roundTokenSlashed;
+
+    struct RoundCaps {
+        uint96 minStakeNative;
+        uint96 minStakeErc20;
+        uint32 maxCommitsPerAuthor;
+        bool allowErc20;
+    }
+
+    mapping(uint256 => RoundCaps) public roundCaps;
+    mapping(uint256 => mapping(address => uint32)) public roundAuthorCommitCount32;
+
+    event R3tardi0_RoundCapsSet(uint256 indexed roundId, uint96 minStakeNative, uint96 minStakeErc20, uint32 maxCommitsPerAuthor, bool allowErc20);
+
+    uint256 internal constant _BPS = 10_000;
+    uint256 internal constant _MAX_NOTE_BYTES = 420;
+    uint256 internal constant _MAX_TAG_BYTES = 64;
+    uint256 internal constant _MAX_STAKE_NATIVE = 0.333 ether;
+    uint256 internal constant _MAX_STAKE_ERC20 = 7_777_777 ether;
+    uint256 internal constant _MAX_SLASH_BPS = 2500; // 25%
+
+    // --------- reentrancy ----------
+    error R3tardi0__Reentrant();
+    uint256 private _re;
+
+    modifier nonReentrant() {
+        if (_re == 2) revert R3tardi0__Reentrant();
+        _re = 2;
+        _;
+        _re = 1;
+    }
+
+    // --------- errors ----------
+    error R3tardi0__NotOwner();
+    error R3tardi0__Paused();
+    error R3tardi0__AlreadyPaused();
+    error R3tardi0__AlreadyUnpaused();
+    error R3tardi0__ZeroAddress();
+    error R3tardi0__BadLen();
+    error R3tardi0__AmountZero();
+    error R3tardi0__BadWindow();
+    error R3tardi0__BadPhase();
+    error R3tardi0__BadCommit();
+    error R3tardi0__Expired();
+    error R3tardi0__NotAuthor();
+    error R3tardi0__AlreadyRevealed();
+    error R3tardi0__BadToken();
+    error R3tardi0__Cap();
