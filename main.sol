@@ -148,3 +148,53 @@ contract R3tardi0 {
     error R3tardi0__AlreadyRevealed();
     error R3tardi0__BadToken();
     error R3tardi0__Cap();
+    error R3tardi0__NativeRejected();
+    error R3tardi0__BadCall();
+
+    // --------- events ----------
+    event R3tardi0_OwnerShift(address indexed prev, address indexed next);
+    event R3tardi0_PauseChanged(bool paused, address indexed by);
+    event R3tardi0_FeeSet(uint256 bps);
+    event R3tardi0_FeeSinkSet(address indexed prev, address indexed next);
+    event R3tardi0_RoundOpened(uint256 indexed roundId, uint64 commitUntil, uint64 revealUntil);
+    event R3tardi0_Committed(uint256 indexed roundId, address indexed author, bytes32 indexed commitHash, uint256 stakeNative);
+    event R3tardi0_Revealed(
+        uint256 indexed roundId,
+        address indexed author,
+        bytes32 indexed commitHash,
+        bytes32 payloadHash,
+        uint256 feeNative,
+        uint256 stakeRefund
+    );
+    event R3tardi0_CommittedERC20(uint256 indexed roundId, address indexed token, address indexed author, bytes32 commitHash, uint256 stake);
+    event R3tardi0_RevealedERC20(uint256 indexed roundId, address indexed token, address indexed author, bytes32 commitHash, bytes32 payloadHash, uint256 fee, uint256 refund);
+    event R3tardi0_ExpiredClaimed(uint256 indexed roundId, address indexed author, bytes32 indexed commitHash, uint256 slash, uint256 payout);
+    event R3tardi0_ExpiredClaimedERC20(uint256 indexed roundId, address indexed token, address indexed author, bytes32 commitHash, uint256 slash, uint256 payout);
+    event R3tardi0_SlashSet(uint256 bps);
+    event R3tardi0_TokenAllowSet(address indexed token, bool allowed);
+    event R3tardi0_Notice(bytes32 indexed tag, uint256 a, uint256 b, address indexed who);
+
+    // --------- state ----------
+    address private _owner;
+    bool public paused;
+
+    uint256 public feeBps;
+    address public feeSink;
+    uint256 public unrevealedSlashBps;
+    mapping(address => bool) public allowedToken;
+
+    H0piuM public immutable VAULT;
+
+    struct Round {
+        uint64 commitUntil;
+        uint64 revealUntil;
+        bool exists;
+    }
+
+    struct Commitment {
+        address author;
+        uint96 stakeNative;
+        bool revealed;
+        uint64 committedAt;
+        bytes32 payloadHash; // set at reveal
+    }
