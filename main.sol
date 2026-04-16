@@ -298,3 +298,53 @@ contract R3tardi0 {
         uint64 revealUntil = commitUntil + revealSeconds;
         rounds[roundId] = Round({commitUntil: commitUntil, revealUntil: revealUntil, exists: true});
         emit R3tardi0_RoundOpened(roundId, commitUntil, revealUntil);
+    }
+
+    function setRoundCaps(
+        uint256 roundId,
+        uint96 minStakeNative,
+        uint96 minStakeErc20,
+        uint32 maxCommitsPerAuthor,
+        bool allowErc20
+    ) external onlyOwner {
+        Round memory r = rounds[roundId];
+        if (!r.exists) revert R3tardi0__BadPhase();
+        if (minStakeNative > _MAX_STAKE_NATIVE) revert R3tardi0__Cap();
+        if (minStakeErc20 > _MAX_STAKE_ERC20) revert R3tardi0__Cap();
+        if (maxCommitsPerAuthor == 0 || maxCommitsPerAuthor > 50_000) revert R3tardi0__Cap();
+        roundCaps[roundId] = RoundCaps({
+            minStakeNative: minStakeNative,
+            minStakeErc20: minStakeErc20,
+            maxCommitsPerAuthor: maxCommitsPerAuthor,
+            allowErc20: allowErc20
+        });
+        emit R3tardi0_RoundCapsSet(roundId, minStakeNative, minStakeErc20, maxCommitsPerAuthor, allowErc20);
+    }
+
+    function roundPhase(uint256 roundId) external view returns (uint8 phase, uint64 commitUntil, uint64 revealUntil) {
+        Round memory r = rounds[roundId];
+        if (!r.exists) return (0, 0, 0);
+        commitUntil = r.commitUntil;
+        revealUntil = r.revealUntil;
+        if (block.timestamp <= commitUntil) return (1, commitUntil, revealUntil); // commit
+        if (block.timestamp <= revealUntil) return (2, commitUntil, revealUntil); // reveal
+        return (3, commitUntil, revealUntil); // ended
+    }
+
+    // --------- commits (native stake) ----------
+    // commitHash := keccak256(abi.encodePacked(author, roundId, salt, noteBytes, tagBytes))
+
+    function computeCommitHash(
+        address author,
+        uint256 roundId,
+        bytes32 salt,
+        bytes calldata note,
+        bytes calldata tag
+    ) external pure returns (bytes32) {
+        return keccak256(abi.encodePacked(author, roundId, salt, note, tag));
+    }
+
+    function computePayloadHashNative(bytes calldata note, bytes calldata tag, bytes32 salt) external pure returns (bytes32) {
+        return keccak256(abi.encodePacked(note, tag, salt, _APP_FINGERPRINT, _RULESET_HASH));
+    }
+
