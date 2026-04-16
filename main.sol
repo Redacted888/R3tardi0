@@ -548,3 +548,53 @@ contract R3tardi0 {
         c.payloadHash = payloadHash;
 
         uint256 stake = uint256(c.stakeNative);
+        uint256 fee = (stake * feeBps) / _BPS;
+        uint256 refund = stake - fee;
+        if (fee > 0) VAULT.withdrawNative(payable(feeSink), fee);
+        if (refund > 0) VAULT.withdrawNative(payable(author), refund);
+        emit R3tardi0_Revealed(roundId, author, commitHash, payloadHash, fee, refund);
+        emit R3tardi0_RevealRelayed(roundId, author, msg.sender, nonce);
+        roundTally[roundId].revealCount += 1;
+        roundTally[roundId].totalNativeFees += uint128(fee);
+    }
+
+    // --------- commits (ERC20 stake) ----------
+    function commitERC20(uint256 roundId, address token, bytes32 commitHash, uint256 stake) external whenNotPaused nonReentrant {
+        _commitErc20(msg.sender, roundId, token, commitHash, stake);
+    }
+
+    function commitERC20For(
+        address author,
+        uint256 roundId,
+        address token,
+        bytes32 commitHash,
+        uint256 stake
+    ) external whenNotPaused nonReentrant {
+        if (author == address(0)) revert R3tardi0__ZeroAddress();
+        _commitErc20(author, roundId, token, commitHash, stake);
+    }
+
+    function _commitErc20(address author, uint256 roundId, address token, bytes32 commitHash, uint256 stake) internal {
+        Round memory r = rounds[roundId];
+        if (!r.exists) revert R3tardi0__BadPhase();
+        if (block.timestamp > r.commitUntil) revert R3tardi0__Expired();
+        if (token == address(0)) revert R3tardi0__ZeroAddress();
+        if (!allowedToken[token]) revert R3tardi0__BadToken();
+        if (commitHash == bytes32(0)) revert R3tardi0__BadCommit();
+        if (stake == 0) revert R3tardi0__AmountZero();
+        if (stake > _MAX_STAKE_ERC20) revert R3tardi0__Cap();
+
+        RoundCaps memory caps = roundCaps[roundId];
+        if (!caps.allowErc20) revert R3tardi0__BadPhase();
+        if (caps.maxCommitsPerAuthor != 0) {
+            uint32 used = roundAuthorCommitCount32[roundId][author];
+            if (used >= caps.maxCommitsPerAuthor) revert R3tardi0__Cap();
+            roundAuthorCommitCount32[roundId][author] = used + 1;
+        }
+        if (caps.minStakeErc20 != 0 && stake < uint256(caps.minStakeErc20)) revert R3tardi0__Cap();
+
+        Commitment storage c = commitments[roundId][commitHash];
+        if (c.author != address(0)) revert R3tardi0__BadCommit();
+        c.author = author;
+        c.stakeNative = 0;
+        c.revealed = false;
