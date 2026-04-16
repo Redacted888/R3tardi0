@@ -598,3 +598,53 @@ contract R3tardi0 {
         c.author = author;
         c.stakeNative = 0;
         c.revealed = false;
+        c.committedAt = uint64(block.timestamp);
+
+        token.safeTransferFrom(msg.sender, address(this), stake);
+        token.safeApprove(address(VAULT), stake);
+        VAULT.depositERC20(token, address(this), stake);
+
+        commitToken[roundId][commitHash] = token;
+        erc20Stake[roundId][token][commitHash] = stake;
+        _roundCommits[roundId].push(commitHash);
+        _authorCommits[author].push(commitHash);
+        _roundAuthorCommits[roundId][author].push(commitHash);
+        roundTally[roundId].commitCount += 1;
+        roundTokenStaked[roundId][token] += stake;
+
+        emit R3tardi0_CommittedERC20(roundId, token, author, commitHash, stake);
+    }
+
+    function revealERC20(
+        uint256 roundId,
+        address token,
+        bytes32 salt,
+        bytes calldata note,
+        bytes calldata tag
+    ) external whenNotPaused nonReentrant {
+        Round memory r = rounds[roundId];
+        if (!r.exists) revert R3tardi0__BadPhase();
+        if (block.timestamp <= r.commitUntil) revert R3tardi0__BadPhase();
+        if (block.timestamp > r.revealUntil) revert R3tardi0__Expired();
+        if (token == address(0)) revert R3tardi0__ZeroAddress();
+        if (note.length == 0 || note.length > _MAX_NOTE_BYTES) revert R3tardi0__BadLen();
+        if (tag.length == 0 || tag.length > _MAX_TAG_BYTES) revert R3tardi0__BadLen();
+
+        bytes32 commitHash = keccak256(abi.encodePacked(msg.sender, roundId, salt, note, tag));
+        Commitment storage c = commitments[roundId][commitHash];
+        if (c.author == address(0)) revert R3tardi0__BadCommit();
+        if (c.author != msg.sender) revert R3tardi0__NotAuthor();
+        if (c.revealed) revert R3tardi0__AlreadyRevealed();
+
+        uint256 stake = erc20Stake[roundId][token][commitHash];
+        if (stake == 0) revert R3tardi0__BadToken();
+
+        c.revealed = true;
+        bytes32 payloadHash = keccak256(abi.encodePacked(note, tag, salt, token, _APP_FINGERPRINT));
+        c.payloadHash = payloadHash;
+
+        uint256 fee = (stake * feeBps) / _BPS;
+        uint256 refund = stake - fee;
+
+        // Settle from the vault (staked into H0piuM under this contract's balance).
+        if (fee > 0) VAULT.withdrawERC20(token, feeSink, fee);
