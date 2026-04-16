@@ -698,3 +698,53 @@ contract R3tardi0 {
         if (stake == 0) revert R3tardi0__BadToken();
 
         c.revealed = true;
+        bytes32 payloadHash = keccak256(abi.encodePacked(note, tag, salt, token, _APP_FINGERPRINT));
+        c.payloadHash = payloadHash;
+
+        uint256 fee = (stake * feeBps) / _BPS;
+        uint256 refund = stake - fee;
+        if (fee > 0) VAULT.withdrawERC20(token, feeSink, fee);
+        if (refund > 0) VAULT.withdrawERC20(token, author, refund);
+
+        erc20Stake[roundId][token][commitHash] = 0;
+        emit R3tardi0_RevealedERC20(roundId, token, author, commitHash, payloadHash, fee, refund);
+        emit R3tardi0_RevealRelayedERC20(roundId, token, author, msg.sender, nonce);
+        roundTokenFees[roundId][token] += fee;
+    }
+
+    function claimExpired(uint256 roundId, bytes32 commitHash) external whenNotPaused nonReentrant {
+        Round memory r = rounds[roundId];
+        if (!r.exists) revert R3tardi0__BadPhase();
+        if (block.timestamp <= r.revealUntil) revert R3tardi0__BadPhase();
+
+        Commitment storage c = commitments[roundId][commitHash];
+        if (c.author == address(0)) revert R3tardi0__BadCommit();
+        if (c.author != msg.sender) revert R3tardi0__NotAuthor();
+        if (c.revealed) revert R3tardi0__AlreadyRevealed();
+
+        c.revealed = true; // lock it
+        uint256 stakeNative = uint256(c.stakeNative);
+        if (stakeNative > 0) {
+            uint256 slash = (stakeNative * unrevealedSlashBps) / _BPS;
+            uint256 payout = stakeNative - slash;
+            if (slash > 0) VAULT.withdrawNative(payable(feeSink), slash);
+            if (payout > 0) VAULT.withdrawNative(payable(msg.sender), payout);
+            emit R3tardi0_ExpiredClaimed(roundId, msg.sender, commitHash, slash, payout);
+            roundTally[roundId].totalNativeSlashed += uint128(slash);
+            return;
+        }
+
+        address token = commitToken[roundId][commitHash];
+        if (token == address(0)) revert R3tardi0__BadToken();
+        uint256 stake = erc20Stake[roundId][token][commitHash];
+        if (stake == 0) revert R3tardi0__BadToken();
+        erc20Stake[roundId][token][commitHash] = 0;
+
+        uint256 slashE = (stake * unrevealedSlashBps) / _BPS;
+        uint256 payoutE = stake - slashE;
+        if (slashE > 0) VAULT.withdrawERC20(token, feeSink, slashE);
+        if (payoutE > 0) VAULT.withdrawERC20(token, msg.sender, payoutE);
+        emit R3tardi0_ExpiredClaimedERC20(roundId, token, msg.sender, commitHash, slashE, payoutE);
+        roundTokenSlashed[roundId][token] += slashE;
+    }
+
