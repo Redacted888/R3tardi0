@@ -648,3 +648,53 @@ contract R3tardi0 {
 
         // Settle from the vault (staked into H0piuM under this contract's balance).
         if (fee > 0) VAULT.withdrawERC20(token, feeSink, fee);
+        if (refund > 0) VAULT.withdrawERC20(token, msg.sender, refund);
+
+        erc20Stake[roundId][token][commitHash] = 0;
+        emit R3tardi0_RevealedERC20(roundId, token, msg.sender, commitHash, payloadHash, fee, refund);
+        roundTokenFees[roundId][token] += fee;
+    }
+
+    function revealERC20ForWithSig(
+        address author,
+        uint256 roundId,
+        address token,
+        bytes32 salt,
+        bytes calldata note,
+        bytes calldata tag,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external whenNotPaused nonReentrant returns (uint256 nonce) {
+        if (author == address(0) || token == address(0)) revert R3tardi0__ZeroAddress();
+        if (block.timestamp > deadline) revert R3tardi0__AuthExpired();
+        if (note.length == 0 || note.length > _MAX_NOTE_BYTES) revert R3tardi0__BadLen();
+        if (tag.length == 0 || tag.length > _MAX_TAG_BYTES) revert R3tardi0__BadLen();
+
+        nonce = revealNonces[author];
+        bytes32 noteHash = keccak256(note);
+        bytes32 tagHash = keccak256(tag);
+        bytes32 structHash = keccak256(
+            abi.encode(_REVEAL_ERC20_AUTH_TYPEHASH, author, roundId, token, salt, noteHash, tagHash, deadline, nonce)
+        );
+        bytes32 digest = _hashTypedDataV4(structHash);
+        address signer = _recoverStrict(digest, v, r, s);
+        if (signer != author) revert R3tardi0__AuthBadSig();
+        revealNonces[author] = nonce + 1;
+
+        Round memory rr = rounds[roundId];
+        if (!rr.exists) revert R3tardi0__BadPhase();
+        if (block.timestamp <= rr.commitUntil) revert R3tardi0__BadPhase();
+        if (block.timestamp > rr.revealUntil) revert R3tardi0__Expired();
+
+        bytes32 commitHash = keccak256(abi.encodePacked(author, roundId, salt, note, tag));
+        Commitment storage c = commitments[roundId][commitHash];
+        if (c.author == address(0)) revert R3tardi0__BadCommit();
+        if (c.author != author) revert R3tardi0__NotAuthor();
+        if (c.revealed) revert R3tardi0__AlreadyRevealed();
+
+        uint256 stake = erc20Stake[roundId][token][commitHash];
+        if (stake == 0) revert R3tardi0__BadToken();
+
+        c.revealed = true;
