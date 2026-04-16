@@ -348,3 +348,53 @@ contract R3tardi0 {
         return keccak256(abi.encodePacked(note, tag, salt, _APP_FINGERPRINT, _RULESET_HASH));
     }
 
+    function computePayloadHashERC20(bytes calldata note, bytes calldata tag, bytes32 salt, address token)
+        external
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(note, tag, salt, token, _APP_FINGERPRINT));
+    }
+
+    function limits()
+        external
+        pure
+        returns (
+            uint256 maxNoteBytes,
+            uint256 maxTagBytes,
+            uint256 maxStakeNative,
+            uint256 maxStakeErc20,
+            uint256 maxSlashBps,
+            uint256 pageMax
+        )
+    {
+        maxNoteBytes = _MAX_NOTE_BYTES;
+        maxTagBytes = _MAX_TAG_BYTES;
+        maxStakeNative = _MAX_STAKE_NATIVE;
+        maxStakeErc20 = _MAX_STAKE_ERC20;
+        maxSlashBps = _MAX_SLASH_BPS;
+        pageMax = _PAGE_MAX;
+    }
+
+    function commitExists(uint256 roundId, bytes32 commitHash) external view returns (bool) {
+        return commitments[roundId][commitHash].author != address(0);
+    }
+
+    function commitRevealed(uint256 roundId, bytes32 commitHash) external view returns (bool) {
+        Commitment memory c = commitments[roundId][commitHash];
+        if (c.author == address(0)) return false;
+        return c.revealed;
+    }
+
+    function roundExists(uint256 roundId) external view returns (bool) {
+        return rounds[roundId].exists;
+    }
+
+    function timeLeft(uint256 roundId) external view returns (uint256 commitLeft, uint256 revealLeft) {
+        Round memory r = rounds[roundId];
+        if (!r.exists) return (0, 0);
+        if (block.timestamp < r.commitUntil) commitLeft = r.commitUntil - uint64(block.timestamp);
+        if (block.timestamp < r.revealUntil) revealLeft = r.revealUntil - uint64(block.timestamp);
+    }
+
+    function computeCommitHashFromHashes(
