@@ -248,3 +248,53 @@ contract R3tardi0 {
     function transferOwner(address next) external onlyOwner {
         if (next == address(0)) revert R3tardi0__ZeroAddress();
         address prev = _owner;
+        _owner = next;
+        emit R3tardi0_OwnerShift(prev, next);
+    }
+
+    function pause() external onlyOwner {
+        if (paused) revert R3tardi0__AlreadyPaused();
+        paused = true;
+        emit R3tardi0_PauseChanged(true, msg.sender);
+    }
+
+    function unpause() external onlyOwner {
+        if (!paused) revert R3tardi0__AlreadyUnpaused();
+        paused = false;
+        emit R3tardi0_PauseChanged(false, msg.sender);
+    }
+
+    function setFeeBps(uint256 bps) external onlyOwner {
+        if (bps > 500) revert R3tardi0__Cap(); // hard cap: 5%
+        feeBps = bps;
+        emit R3tardi0_FeeSet(bps);
+    }
+
+    function setUnrevealedSlashBps(uint256 bps) external onlyOwner {
+        if (bps > _MAX_SLASH_BPS) revert R3tardi0__Cap();
+        unrevealedSlashBps = bps;
+        emit R3tardi0_SlashSet(bps);
+    }
+
+    function setAllowedToken(address token, bool allowed) external onlyOwner {
+        if (token == address(0)) revert R3tardi0__ZeroAddress();
+        allowedToken[token] = allowed;
+        emit R3tardi0_TokenAllowSet(token, allowed);
+    }
+
+    function setFeeSink(address next) external onlyOwner {
+        if (next == address(0)) revert R3tardi0__ZeroAddress();
+        address prev = feeSink;
+        feeSink = next;
+        emit R3tardi0_FeeSinkSet(prev, next);
+    }
+
+    // --------- rounds ----------
+    function openRound(uint64 commitSeconds, uint64 revealSeconds) external onlyOwner whenNotPaused returns (uint256 roundId) {
+        if (commitSeconds < 5 minutes || commitSeconds > 9 days) revert R3tardi0__BadWindow();
+        if (revealSeconds < 5 minutes || revealSeconds > 11 days) revert R3tardi0__BadWindow();
+        roundId = ++roundsCount;
+        uint64 commitUntil = uint64(block.timestamp) + commitSeconds;
+        uint64 revealUntil = commitUntil + revealSeconds;
+        rounds[roundId] = Round({commitUntil: commitUntil, revealUntil: revealUntil, exists: true});
+        emit R3tardi0_RoundOpened(roundId, commitUntil, revealUntil);
