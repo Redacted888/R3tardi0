@@ -748,3 +748,53 @@ contract R3tardi0 {
         roundTokenSlashed[roundId][token] += slashE;
     }
 
+    function batchClaimExpired(uint256 roundId, bytes32[] calldata commitHashes) external whenNotPaused nonReentrant {
+        if (commitHashes.length > _PAGE_MAX) revert R3tardi0__Cap();
+        for (uint256 i = 0; i < commitHashes.length; ) {
+            claimExpired(roundId, commitHashes[i]);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function batchRevealForWithSig(
+        address author,
+        uint256 roundId,
+        bytes32[] calldata salts,
+        bytes[] calldata notes,
+        bytes[] calldata tags,
+        uint256 deadline,
+        uint8[] calldata vs,
+        bytes32[] calldata rs,
+        bytes32[] calldata ss
+    ) external whenNotPaused nonReentrant {
+        uint256 n = salts.length;
+        if (n == 0 || n > _PAGE_MAX) revert R3tardi0__Cap();
+        if (notes.length != n || tags.length != n || vs.length != n || rs.length != n || ss.length != n) revert R3tardi0__BadLen();
+        for (uint256 i = 0; i < n; ) {
+            revealForWithSig(author, roundId, salts[i], notes[i], tags[i], deadline, vs[i], rs[i], ss[i]);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function batchRevealERC20ForWithSig(
+        address author,
+        uint256 roundId,
+        address token,
+        bytes32[] calldata salts,
+        bytes[] calldata notes,
+        bytes[] calldata tags,
+        uint256 deadline,
+        uint8[] calldata vs,
+        bytes32[] calldata rs,
+        bytes32[] calldata ss
+    ) external whenNotPaused nonReentrant {
+        uint256 n = salts.length;
+        if (n == 0 || n > _PAGE_MAX) revert R3tardi0__Cap();
+        if (notes.length != n || tags.length != n || vs.length != n || rs.length != n || ss.length != n) revert R3tardi0__BadLen();
+        for (uint256 i = 0; i < n; ) {
+            revealERC20ForWithSig(author, roundId, token, salts[i], notes[i], tags[i], deadline, vs[i], rs[i], ss[i]);
+            unchecked {
