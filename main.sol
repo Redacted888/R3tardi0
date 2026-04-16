@@ -448,3 +448,53 @@ contract R3tardi0 {
         Commitment storage c = commitments[roundId][commitHash];
         if (c.author != address(0)) revert R3tardi0__BadCommit();
         c.author = author;
+        c.stakeNative = uint96(stakeNative);
+        c.revealed = false;
+        c.committedAt = uint64(block.timestamp);
+        emit R3tardi0_Committed(roundId, author, commitHash, stakeNative);
+
+        _roundCommits[roundId].push(commitHash);
+        _authorCommits[author].push(commitHash);
+        _roundAuthorCommits[roundId][author].push(commitHash);
+        roundTally[roundId].commitCount += 1;
+        roundTally[roundId].totalNativeStaked += uint128(stakeNative);
+
+        // stake is held in the vault under this contract's balance key
+        VAULT.depositNative{value: stakeNative}(address(this));
+    }
+
+    function reveal(
+        uint256 roundId,
+        bytes32 salt,
+        bytes calldata note,
+        bytes calldata tag
+    ) external whenNotPaused nonReentrant {
+        Round memory r = rounds[roundId];
+        if (!r.exists) revert R3tardi0__BadPhase();
+        if (block.timestamp <= r.commitUntil) revert R3tardi0__BadPhase();
+        if (block.timestamp > r.revealUntil) revert R3tardi0__Expired();
+        if (note.length == 0 || note.length > _MAX_NOTE_BYTES) revert R3tardi0__BadLen();
+        if (tag.length == 0 || tag.length > _MAX_TAG_BYTES) revert R3tardi0__BadLen();
+
+        bytes32 commitHash = keccak256(abi.encodePacked(msg.sender, roundId, salt, note, tag));
+        Commitment storage c = commitments[roundId][commitHash];
+        if (c.author == address(0)) revert R3tardi0__BadCommit();
+        if (c.author != msg.sender) revert R3tardi0__NotAuthor();
+        if (c.revealed) revert R3tardi0__AlreadyRevealed();
+
+        c.revealed = true;
+        bytes32 payloadHash = keccak256(abi.encodePacked(note, tag, salt, _APP_FINGERPRINT, _RULESET_HASH));
+        c.payloadHash = payloadHash;
+
+        uint256 stake = uint256(c.stakeNative);
+        uint256 fee = (stake * feeBps) / _BPS;
+        uint256 refund = stake - fee;
+
+        // withdraw from vault to settle
+        if (fee > 0) {
+            VAULT.withdrawNative(payable(feeSink), fee);
+        }
+        if (refund > 0) {
+            VAULT.withdrawNative(payable(msg.sender), refund);
+        }
+
