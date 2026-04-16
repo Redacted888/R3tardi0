@@ -498,3 +498,53 @@ contract R3tardi0 {
             VAULT.withdrawNative(payable(msg.sender), refund);
         }
 
+        emit R3tardi0_Revealed(roundId, msg.sender, commitHash, payloadHash, fee, refund);
+        roundTally[roundId].revealCount += 1;
+        roundTally[roundId].totalNativeFees += uint128(fee);
+    }
+
+    // Reveal relay is supported via `revealForWithSig` / `revealERC20ForWithSig` (author included in payload).
+
+    function revealForWithSig(
+        address author,
+        uint256 roundId,
+        bytes32 salt,
+        bytes calldata note,
+        bytes calldata tag,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external whenNotPaused nonReentrant returns (uint256 nonce) {
+        if (author == address(0)) revert R3tardi0__ZeroAddress();
+        if (block.timestamp > deadline) revert R3tardi0__AuthExpired();
+        if (note.length == 0 || note.length > _MAX_NOTE_BYTES) revert R3tardi0__BadLen();
+        if (tag.length == 0 || tag.length > _MAX_TAG_BYTES) revert R3tardi0__BadLen();
+
+        nonce = revealNonces[author];
+        bytes32 noteHash = keccak256(note);
+        bytes32 tagHash = keccak256(tag);
+        bytes32 structHash = keccak256(
+            abi.encode(_REVEAL_AUTH_TYPEHASH, author, roundId, salt, noteHash, tagHash, deadline, nonce)
+        );
+        bytes32 digest = _hashTypedDataV4(structHash);
+        address signer = _recoverStrict(digest, v, r, s);
+        if (signer != author) revert R3tardi0__AuthBadSig();
+        revealNonces[author] = nonce + 1;
+
+        Round memory rr = rounds[roundId];
+        if (!rr.exists) revert R3tardi0__BadPhase();
+        if (block.timestamp <= rr.commitUntil) revert R3tardi0__BadPhase();
+        if (block.timestamp > rr.revealUntil) revert R3tardi0__Expired();
+
+        bytes32 commitHash = keccak256(abi.encodePacked(author, roundId, salt, note, tag));
+        Commitment storage c = commitments[roundId][commitHash];
+        if (c.author == address(0)) revert R3tardi0__BadCommit();
+        if (c.author != author) revert R3tardi0__NotAuthor();
+        if (c.revealed) revert R3tardi0__AlreadyRevealed();
+
+        c.revealed = true;
+        bytes32 payloadHash = keccak256(abi.encodePacked(note, tag, salt, _APP_FINGERPRINT, _RULESET_HASH));
+        c.payloadHash = payloadHash;
+
+        uint256 stake = uint256(c.stakeNative);
