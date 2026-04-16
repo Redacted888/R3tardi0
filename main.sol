@@ -848,3 +848,53 @@ contract R3tardi0 {
     }
 
     function roundAuthorCommitsPage(uint256 roundId, address author, uint256 offset, uint256 limit)
+        external
+        view
+        returns (bytes32[] memory out)
+    {
+        if (limit > _PAGE_MAX) limit = _PAGE_MAX;
+        bytes32[] storage src = _roundAuthorCommits[roundId][author];
+        uint256 n = src.length;
+        if (offset >= n) return new bytes32[](0);
+        uint256 end = offset + limit;
+        if (end > n) end = n;
+        out = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; ) {
+            out[i - offset] = src[i];
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function domainSeparatorV4() external view returns (bytes32) {
+        return _domainSeparatorV4();
+    }
+
+    function previewRevealDigest(
+        address author,
+        uint256 roundId,
+        bytes32 salt,
+        bytes32 noteHash,
+        bytes32 tagHash,
+        uint256 deadline,
+        uint256 nonce
+    ) external view returns (bytes32) {
+        bytes32 sh = keccak256(abi.encode(_REVEAL_AUTH_TYPEHASH, author, roundId, salt, noteHash, tagHash, deadline, nonce));
+        return _hashTypedDataV4(sh);
+    }
+
+    function previewRevealERC20Digest(
+        address author,
+        uint256 roundId,
+        address token,
+        bytes32 salt,
+        bytes32 noteHash,
+        bytes32 tagHash,
+        uint256 deadline,
+        uint256 nonce
+    ) external view returns (bytes32) {
+        bytes32 sh =
+            keccak256(abi.encode(_REVEAL_ERC20_AUTH_TYPEHASH, author, roundId, token, salt, noteHash, tagHash, deadline, nonce));
+        return _hashTypedDataV4(sh);
+    }
