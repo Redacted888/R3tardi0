@@ -898,3 +898,53 @@ contract R3tardi0 {
             keccak256(abi.encode(_REVEAL_ERC20_AUTH_TYPEHASH, author, roundId, token, salt, noteHash, tagHash, deadline, nonce));
         return _hashTypedDataV4(sh);
     }
+
+    function _domainSeparatorV4() internal view returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    _EIP712_DOMAIN_TYPEHASH,
+                    _EIP712_NAME_HASH,
+                    _EIP712_VERSION_HASH,
+                    block.chainid,
+                    address(this)
+                )
+            );
+    }
+
+    function _hashTypedDataV4(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparatorV4(), structHash));
+    }
+
+    function _recoverStrict(bytes32 digest, uint8 v, bytes32 r, bytes32 s) internal pure returns (address) {
+        if (v != 27 && v != 28) revert R3tardi0__AuthBadSig();
+        if (uint256(s) > _SECP256K1_HALF_ORDER) revert R3tardi0__AuthBadSig();
+        address signer = ecrecover(digest, v, r, s);
+        if (signer == address(0)) revert R3tardi0__AuthBadSig();
+        return signer;
+    }
+
+    // --------- convenience ----------
+    function commitmentOf(uint256 roundId, bytes32 commitHash) external view returns (Commitment memory c) {
+        c = commitments[roundId][commitHash];
+    }
+
+    struct CommitmentView {
+        address author;
+        bool revealed;
+        uint64 committedAt;
+        bytes32 payloadHash;
+        uint256 stakeNative;
+        address stakeToken;
+        uint256 stakeErc20;
+        uint8 phase; // 0 missing, 1 commit, 2 reveal, 3 ended
+    }
+
+    function commitmentView(uint256 roundId, bytes32 commitHash) external view returns (CommitmentView memory v) {
+        Commitment memory c = commitments[roundId][commitHash];
+        Round memory r = rounds[roundId];
+        v.author = c.author;
+        v.revealed = c.revealed;
+        v.committedAt = c.committedAt;
+        v.payloadHash = c.payloadHash;
+        v.stakeNative = uint256(c.stakeNative);
