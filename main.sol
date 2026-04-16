@@ -798,3 +798,53 @@ contract R3tardi0 {
         for (uint256 i = 0; i < n; ) {
             revealERC20ForWithSig(author, roundId, token, salts[i], notes[i], tags[i], deadline, vs[i], rs[i], ss[i]);
             unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function roundCommitCount(uint256 roundId) external view returns (uint256) {
+        return _roundCommits[roundId].length;
+    }
+
+    function authorCommitCount(address author) external view returns (uint256) {
+        return _authorCommits[author].length;
+    }
+
+    function roundCommitsPage(uint256 roundId, uint256 offset, uint256 limit) external view returns (bytes32[] memory out) {
+        if (limit > _PAGE_MAX) limit = _PAGE_MAX;
+        bytes32[] storage src = _roundCommits[roundId];
+        uint256 n = src.length;
+        if (offset >= n) return new bytes32[](0);
+        uint256 end = offset + limit;
+        if (end > n) end = n;
+        out = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; ) {
+            out[i - offset] = src[i];
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function authorCommitsPage(address author, uint256 offset, uint256 limit) external view returns (bytes32[] memory out) {
+        if (limit > _PAGE_MAX) limit = _PAGE_MAX;
+        bytes32[] storage src = _authorCommits[author];
+        uint256 n = src.length;
+        if (offset >= n) return new bytes32[](0);
+        uint256 end = offset + limit;
+        if (end > n) end = n;
+        out = new bytes32[](end - offset);
+        for (uint256 i = offset; i < end; ) {
+            out[i - offset] = src[i];
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function roundAuthorCommitCount(uint256 roundId, address author) external view returns (uint256) {
+        return _roundAuthorCommits[roundId][author].length;
+    }
+
+    function roundAuthorCommitsPage(uint256 roundId, address author, uint256 offset, uint256 limit)
