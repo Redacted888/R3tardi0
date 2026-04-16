@@ -198,3 +198,53 @@ contract R3tardi0 {
         uint64 committedAt;
         bytes32 payloadHash; // set at reveal
     }
+
+    // roundId => commitHash => commitment
+    mapping(uint256 => mapping(bytes32 => Commitment)) public commitments;
+    mapping(uint256 => Round) public rounds;
+    uint256 public roundsCount;
+
+    // ERC20 stakes tracked separately: roundId => token => commitHash => stake amount
+    mapping(uint256 => mapping(address => mapping(bytes32 => uint256))) public erc20Stake;
+    mapping(uint256 => mapping(bytes32 => address)) public commitToken;
+
+    modifier onlyOwner() {
+        if (msg.sender != _owner) revert R3tardi0__NotOwner();
+        _;
+    }
+
+    modifier whenNotPaused() {
+        if (paused) revert R3tardi0__Paused();
+        _;
+    }
+
+    constructor() {
+        _owner = msg.sender;
+        paused = false;
+        _re = 1;
+
+        // Fee defaults: 69 bps to a deterministic pseudo-random sink (changeable by owner).
+        // No external addresses required at deploy.
+        feeBps = 69;
+        feeSink = _randomSink();
+        unrevealedSlashBps = 333; // 3.33%
+
+        VAULT = new H0piuM();
+        emit R3tardi0_OwnerShift(address(0), msg.sender);
+        emit R3tardi0_FeeSet(feeBps);
+        emit R3tardi0_FeeSinkSet(address(0), feeSink);
+        emit R3tardi0_SlashSet(unrevealedSlashBps);
+    }
+
+    receive() external payable {
+        revert R3tardi0__NativeRejected();
+    }
+
+    // --------- admin ----------
+    function owner() external view returns (address) {
+        return _owner;
+    }
+
+    function transferOwner(address next) external onlyOwner {
+        if (next == address(0)) revert R3tardi0__ZeroAddress();
+        address prev = _owner;
