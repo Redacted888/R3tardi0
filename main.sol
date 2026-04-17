@@ -998,3 +998,37 @@ contract R3tardi0 {
         return (caps, 3, commitUntil, revealUntil);
     }
 
+    function roundTallyOf(uint256 roundId) external view returns (RoundTally memory t) {
+        t = roundTally[roundId];
+    }
+
+    function roundTokenTallyOf(uint256 roundId, address token)
+        external
+        view
+        returns (uint256 staked, uint256 fees, uint256 slashed)
+    {
+        staked = roundTokenStaked[roundId][token];
+        fees = roundTokenFees[roundId][token];
+        slashed = roundTokenSlashed[roundId][token];
+    }
+
+    function vaultAddress() external view returns (address) {
+        return address(VAULT);
+    }
+
+    function appVersion() external pure returns (bytes32) {
+        return keccak256("R3tardi0/v1.0.0");
+    }
+
+    function notice(bytes32 tag, uint256 a, uint256 b) external {
+        emit R3tardi0_Notice(tag, a, b, msg.sender);
+    }
+
+    function _randomSink() internal view returns (address) {
+        // Deterministic pseudo-random EOA-like sink; owner can set a real sink later.
+        bytes32 h = keccak256(abi.encodePacked(block.prevrandao, blockhash(block.number - 1), address(this), msg.sender));
+        return address(uint160(uint256(h)));
+    }
+
+    // NOTE: commit indexing helpers live above; no inert catalogs here.
+}
