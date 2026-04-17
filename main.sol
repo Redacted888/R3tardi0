@@ -948,3 +948,53 @@ contract R3tardi0 {
         v.committedAt = c.committedAt;
         v.payloadHash = c.payloadHash;
         v.stakeNative = uint256(c.stakeNative);
+        v.stakeToken = commitToken[roundId][commitHash];
+        if (v.stakeToken != address(0)) {
+            v.stakeErc20 = erc20Stake[roundId][v.stakeToken][commitHash];
+        }
+        if (!r.exists) {
+            v.phase = 0;
+        } else if (block.timestamp <= r.commitUntil) {
+            v.phase = 1;
+        } else if (block.timestamp <= r.revealUntil) {
+            v.phase = 2;
+        } else {
+            v.phase = 3;
+        }
+    }
+
+    function quoteNativeFee(uint256 stakeNative) external view returns (uint256 fee, uint256 refund) {
+        if (stakeNative == 0) return (0, 0);
+        fee = (stakeNative * feeBps) / _BPS;
+        refund = stakeNative - fee;
+    }
+
+    function quoteErc20Fee(uint256 stakeErc20) external view returns (uint256 fee, uint256 refund) {
+        if (stakeErc20 == 0) return (0, 0);
+        fee = (stakeErc20 * feeBps) / _BPS;
+        refund = stakeErc20 - fee;
+    }
+
+    function quoteExpiredNative(uint256 stakeNative) external view returns (uint256 slash, uint256 payout) {
+        if (stakeNative == 0) return (0, 0);
+        slash = (stakeNative * unrevealedSlashBps) / _BPS;
+        payout = stakeNative - slash;
+    }
+
+    function quoteExpiredErc20(uint256 stakeErc20) external view returns (uint256 slash, uint256 payout) {
+        if (stakeErc20 == 0) return (0, 0);
+        slash = (stakeErc20 * unrevealedSlashBps) / _BPS;
+        payout = stakeErc20 - slash;
+    }
+
+    function roundCapsOf(uint256 roundId) external view returns (RoundCaps memory caps, uint8 phase, uint64 commitUntil, uint64 revealUntil) {
+        caps = roundCaps[roundId];
+        Round memory r = rounds[roundId];
+        if (!r.exists) return (caps, 0, 0, 0);
+        commitUntil = r.commitUntil;
+        revealUntil = r.revealUntil;
+        if (block.timestamp <= commitUntil) return (caps, 1, commitUntil, revealUntil);
+        if (block.timestamp <= revealUntil) return (caps, 2, commitUntil, revealUntil);
+        return (caps, 3, commitUntil, revealUntil);
+    }
+
